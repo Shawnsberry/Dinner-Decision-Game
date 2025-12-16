@@ -91,7 +91,7 @@ const INTRO_KEY = "dinner-intro-seen";
 
 function Pill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-sm">
+    <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-sm text-zinc-900">
       {children}
     </span>
   );
@@ -107,7 +107,7 @@ function Panel({
   return (
     <div className="rounded-2xl border bg-white shadow-sm">
       <div className="border-b px-5 py-4">
-        <h2 className="text-lg font-semibold">{title}</h2>
+        <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
       </div>
       <div className="px-5 py-5">{children}</div>
     </div>
@@ -119,12 +119,14 @@ function Button({
   onClick,
   disabled,
   variant = "primary",
+  className = "",
   type = "button",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   variant?: "primary" | "danger" | "outline" | "ghost";
+  className?: string;
   type?: "button" | "submit";
 }) {
   const base =
@@ -135,12 +137,12 @@ function Button({
       : variant === "danger"
       ? "bg-red-600 text-white hover:bg-red-500"
       : variant === "outline"
-      ? "border bg-white hover:bg-zinc-50"
-      : "hover:bg-zinc-50";
+      ? "border bg-white text-zinc-900 hover:bg-zinc-50"
+      : "hover:bg-zinc-50 text-zinc-900";
   return (
     <button
       type={type}
-      className={`${base} ${styles}`}
+      className={`${base} ${styles} ${className}`}
       onClick={onClick}
       disabled={disabled}
     >
@@ -155,18 +157,21 @@ function IntroScreen({ onStart }: { onStart: () => void }) {
       <div className="max-w-md w-full rounded-2xl border bg-white shadow-sm">
         <div className="p-8 text-center grid gap-4">
           <div className="text-4xl">🍽️</div>
-          <h1 className="text-3xl font-bold">Dinner, Decided</h1>
-          <p className="text-zinc-600">
+          <h1 className="text-3xl font-bold text-zinc-900">Dinner, Decided</h1>
+          <p className="text-zinc-700">
             This little game exists so you don’t have to decide what to cook
             every night.
           </p>
-          <p className="text-sm text-zinc-500">
-            Pick an energy level, hit the button, and let the app be the bad guy.
+          <p className="text-sm text-zinc-600">
+            Pick an energy level, choose any filters you want, then tap the big
+            button.
           </p>
           <div className="pt-2">
-            <Button onClick={onStart}>Let’s Go</Button>
+            <Button onClick={onStart} className="px-6 py-3 text-base">
+              Let’s Go
+            </Button>
           </div>
-          <p className="text-xs text-zinc-400">(Shows once per device.)</p>
+          <p className="text-xs text-zinc-500">(Shows once per device.)</p>
         </div>
       </div>
     </div>
@@ -239,7 +244,7 @@ export default function Page() {
     return ["All", ...vals];
   };
 
-  const randomPick = () => {
+  const letsEat = () => {
     if (filteredMeals.length === 0) return;
     const choice =
       filteredMeals[Math.floor(Math.random() * filteredMeals.length)];
@@ -268,8 +273,10 @@ export default function Page() {
 
   const acceptMeal = () => {
     if (!picked) return;
+
     setHistory((h) => [...h, picked.name]);
 
+    // Adventure points for non-Italian & non-American
     if (!["Italian", "American"].includes(picked.origin)) {
       setPoints((p) => p + 10);
     }
@@ -280,9 +287,7 @@ export default function Page() {
 
   const resetWeek = () => setHistory([]);
 
-  if (!mounted) {
-    return <div className="min-h-screen bg-zinc-50" />;
-  }
+  if (!mounted) return <div className="min-h-screen bg-zinc-50" />;
 
   if (showIntro) {
     return (
@@ -297,12 +302,14 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <div className="max-w-4xl mx-auto p-6 grid gap-6">
-        <header className="text-center grid gap-2">
-          <h1 className="text-3xl font-bold">🎮 Dinner Decision Game</h1>
-          <p className="text-zinc-600">
-            Weekdays default to Busy. Weekends default to Free. Panic button
-            included.
+      <div className="max-w-4xl mx-auto p-6 grid gap-8">
+        <header className="text-center grid gap-3">
+          <h1 className="text-3xl font-bold text-zinc-900">
+            🎮 Dinner Decision Game
+          </h1>
+          <p className="text-zinc-700">
+            Weekdays default to <b>Busy</b>. Weekends default to <b>Free</b>.
+            Panic button included.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-2">
             <Pill>🏆 Points: {points}</Pill>
@@ -312,12 +319,14 @@ export default function Page() {
         </header>
 
         <Panel title="Set the rules">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
             {(Object.keys(filters) as Array<keyof typeof filters>).map((key) => (
-              <div key={key} className="grid gap-1">
-                <label className="text-sm font-semibold capitalize">{key}</label>
+              <div key={key} className="grid gap-2">
+                <label className="text-sm font-semibold capitalize text-zinc-900">
+                  {key}
+                </label>
                 <select
-                  className="w-full rounded-xl border bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-black"
+                  className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black focus:outline-none focus:ring-2 focus:ring-black"
                   value={filters[key]}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, [key]: e.target.value }))
@@ -333,19 +342,29 @@ export default function Page() {
             ))}
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-4 justify-center border-t pt-6">
-            <Button onClick={randomPick} disabled={filteredMeals.length === 0}>
-              🎯 Click to Eat
+          <p className="text-center text-sm text-zinc-600 mt-8">
+            Done choosing? Let the game decide ↓
+          </p>
+
+          <div className="mt-4 flex flex-col sm:flex-row flex-wrap gap-4 justify-center border-t pt-6">
+            <Button
+              onClick={letsEat}
+              disabled={filteredMeals.length === 0}
+              className="px-8 py-4 text-lg"
+            >
+              🍽️ Let’s Eat
             </Button>
-            <Button onClick={panicPick} variant="danger">
+
+            <Button onClick={panicPick} variant="danger" className="px-6 py-4 text-base">
               🚨 I’m Exhausted
-            </Button>r
-            <Button onClick={resetWeek} variant="outline">
+            </Button>
+
+            <Button onClick={resetWeek} variant="outline" className="px-6 py-4 text-base">
               🔄 Reset Weekly Lockout
             </Button>
           </div>
 
-          <p className="mt-3 text-sm text-zinc-600">
+          <p className="mt-4 text-sm text-zinc-700 text-center">
             Remaining options:{" "}
             <span className="font-semibold">{filteredMeals.length}</span>
           </p>
@@ -353,10 +372,12 @@ export default function Page() {
 
         {picked ? (
           <div className="rounded-2xl border bg-white shadow-sm">
-            <div className="p-6 text-center grid gap-3">
+            <div className="p-6 text-center grid gap-4">
               <div className="text-3xl">🍽️</div>
-              <h2 className="text-2xl font-semibold">Tonight’s Winner</h2>
-              <div className="text-xl font-bold">{picked.name}</div>
+              <h2 className="text-2xl font-semibold text-zinc-900">
+                Tonight’s Winner
+              </h2>
+              <div className="text-xl font-bold text-zinc-900">{picked.name}</div>
 
               <div className="flex flex-wrap items-center justify-center gap-2">
                 <Pill>{picked.type}</Pill>
@@ -371,11 +392,12 @@ export default function Page() {
                 {picked.groceries.join(", ")}
               </div>
 
-              <div className="mt-2 flex flex-wrap justify-center gap-3">
+              <div className="mt-2 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
                 <Button
                   variant="outline"
                   disabled={vetoes.you === 0}
                   onClick={() => veto("you")}
+                  className="px-5 py-3 text-base"
                 >
                   🙅 You Veto ({vetoes.you})
                 </Button>
@@ -383,10 +405,13 @@ export default function Page() {
                   variant="outline"
                   disabled={vetoes.partner === 0}
                   onClick={() => veto("partner")}
+                  className="px-5 py-3 text-base"
                 >
                   🙅 Partner Veto ({vetoes.partner})
                 </Button>
-                <Button onClick={acceptMeal}>✅ Accept</Button>
+                <Button onClick={acceptMeal} className="px-6 py-3 text-base">
+                  ✅ Accept
+                </Button>
               </div>
 
               {vetoes.you === 0 && vetoes.partner === 0 ? (
@@ -398,10 +423,10 @@ export default function Page() {
           </div>
         ) : (
           <Panel title="How to play">
-            <ul className="text-sm text-zinc-700 grid gap-2 list-disc pl-5">
+            <ul className="text-base text-zinc-700 grid gap-3 list-disc pl-5">
               <li>Pick an energy level (Busy/Free) and any filters you want.</li>
               <li>
-                Hit <b>Click to eat</b> and let fate choose.
+                Tap <b>🍽️ Let’s Eat</b> and let fate choose.
               </li>
               <li>Each person gets 1 veto… unless panic button was used 😄</li>
             </ul>
