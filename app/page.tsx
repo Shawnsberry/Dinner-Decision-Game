@@ -178,11 +178,66 @@ function IntroScreen({ onStart }: { onStart: () => void }) {
   );
 }
 
+type FilterKey = "type" | "origin" | "diet" | "prep" | "time" | "protein";
+
+const FILTER_META: Record<
+  FilterKey,
+  { label: string; icon: string; hint?: string }
+> = {
+  type: { label: "Type", icon: "🍳" },
+  origin: { label: "Origin", icon: "🌎" },
+  diet: { label: "Diet", icon: "🥗" },
+  prep: { label: "Prep Time", icon: "⏱️" },
+  time: { label: "Energy", icon: "⚡", hint: "Busy vs Free" },
+  protein: { label: "Protein", icon: "💪" },
+};
+
+function FilterSelect({
+  label,
+  icon,
+  value,
+  onChange,
+  options,
+  hint,
+}: {
+  label: string;
+  icon: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  hint?: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <label className="text-sm font-bold tracking-wide text-zinc-900">
+          <span className="mr-2">{icon}</span>
+          {label}
+        </label>
+        {hint ? (
+          <span className="text-xs text-zinc-500">{hint}</span>
+        ) : null}
+      </div>
+      <select
+        className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black focus:outline-none focus:ring-2 focus:ring-black"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
 
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<Record<FilterKey, string>>({
     type: "All",
     origin: "All",
     diet: "All",
@@ -196,13 +251,11 @@ export default function Page() {
   const [history, setHistory] = useState<string[]>([]);
   const [points, setPoints] = useState(0);
 
-  // Mount + decide intro (prevents hydration mismatch)
   useEffect(() => {
     setMounted(true);
     setShowIntro(!localStorage.getItem(INTRO_KEY));
   }, []);
 
-  // Auto-suggest Busy vs Free based on weekday/weekend
   useEffect(() => {
     const day = new Date().getDay(); // 0 Sun ... 6 Sat
     setFilters((f) => ({
@@ -211,7 +264,6 @@ export default function Page() {
     }));
   }, []);
 
-  // Load persisted state
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return;
@@ -219,27 +271,23 @@ export default function Page() {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed.history)) setHistory(parsed.history);
       if (typeof parsed.points === "number") setPoints(parsed.points);
-    } catch {
-      // ignore bad storage
-    }
+    } catch {}
   }, []);
 
-  // Persist history + points
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, points }));
   }, [history, points]);
 
   const filteredMeals = useMemo(() => {
     return meals.filter((m) => {
-      const match = Object.entries(filters).every(([k, v]) => {
-        // @ts-expect-error dynamic key
-        return v === "All" || m[k] === v;
-      });
+      const match = (Object.entries(filters) as [FilterKey, string][]).every(
+        ([k, v]) => v === "All" || (m as any)[k] === v
+      );
       return match && !history.includes(m.name);
     });
   }, [filters, history]);
 
-  const options = (key: keyof typeof filters) => {
+  const options = (key: FilterKey) => {
     const vals = Array.from(new Set(meals.map((m) => (m as any)[key])));
     return ["All", ...vals];
   };
@@ -252,7 +300,6 @@ export default function Page() {
   };
 
   const panicPick = () => {
-    // Panic = Busy mode + no vetoes + immediate pick
     setFilters((f) => ({ ...f, time: "Busy" }));
     setVetoes({ you: 0, partner: 0 });
 
@@ -273,14 +320,10 @@ export default function Page() {
 
   const acceptMeal = () => {
     if (!picked) return;
-
     setHistory((h) => [...h, picked.name]);
-
-    // Adventure points for non-Italian & non-American
     if (!["Italian", "American"].includes(picked.origin)) {
       setPoints((p) => p + 10);
     }
-
     setPicked(null);
     setVetoes({ you: 1, partner: 1 });
   };
@@ -302,7 +345,8 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <div className="max-w-4xl mx-auto p-6 grid gap-8">
+      {/* More breathing room on phones, slightly tighter on desktop */}
+      <div className="max-w-4xl mx-auto p-6 sm:p-7 grid gap-10 sm:gap-8">
         <header className="text-center grid gap-3">
           <h1 className="text-3xl font-bold text-zinc-900">
             🎮 Dinner Decision Game
@@ -319,30 +363,71 @@ export default function Page() {
         </header>
 
         <Panel title="Set the rules">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {(Object.keys(filters) as Array<keyof typeof filters>).map((key) => (
-              <div key={key} className="grid gap-2">
-                <label className="text-sm font-bold tracking-wide text-zinc-900">
-                  {key.charAt(0).toUpperCase() + key.slice(1)}
-                </label>
-                <select
-                  className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black focus:outline-none focus:ring-2 focus:ring-black"
-                  value={filters[key]}
-                  onChange={(e) =>
-                    setFilters((f) => ({ ...f, [key]: e.target.value }))
-                  }
-                >
-                  {options(key).map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
+          {/* Grouped filters with subtle dividers */}
+          <div className="grid gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-5">
+              <FilterSelect
+                icon={FILTER_META.type.icon}
+                label={FILTER_META.type.label}
+                value={filters.type}
+                hint={FILTER_META.type.hint}
+                options={options("type")}
+                onChange={(v) => setFilters((f) => ({ ...f, type: v }))}
+              />
+              <FilterSelect
+                icon={FILTER_META.origin.icon}
+                label={FILTER_META.origin.label}
+                value={filters.origin}
+                hint={FILTER_META.origin.hint}
+                options={options("origin")}
+                onChange={(v) => setFilters((f) => ({ ...f, origin: v }))}
+              />
+            </div>
+
+            <div className="border-t pt-6" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-5">
+              <FilterSelect
+                icon={FILTER_META.diet.icon}
+                label={FILTER_META.diet.label}
+                value={filters.diet}
+                hint={FILTER_META.diet.hint}
+                options={options("diet")}
+                onChange={(v) => setFilters((f) => ({ ...f, diet: v }))}
+              />
+              <FilterSelect
+                icon={FILTER_META.protein.icon}
+                label={FILTER_META.protein.label}
+                value={filters.protein}
+                hint={FILTER_META.protein.hint}
+                options={options("protein")}
+                onChange={(v) => setFilters((f) => ({ ...f, protein: v }))}
+              />
+            </div>
+
+            <div className="border-t pt-6" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-5">
+              <FilterSelect
+                icon={FILTER_META.prep.icon}
+                label={FILTER_META.prep.label}
+                value={filters.prep}
+                hint={FILTER_META.prep.hint}
+                options={options("prep")}
+                onChange={(v) => setFilters((f) => ({ ...f, prep: v }))}
+              />
+              <FilterSelect
+                icon={FILTER_META.time.icon}
+                label={FILTER_META.time.label}
+                value={filters.time}
+                hint={FILTER_META.time.hint}
+                options={options("time")}
+                onChange={(v) => setFilters((f) => ({ ...f, time: v }))}
+              />
+            </div>
           </div>
 
-          <p className="text-center text-sm text-zinc-600 mt-8">
+          <p className="text-center text-sm text-zinc-600 mt-10">
             Done choosing? Let the game decide ↓
           </p>
 
@@ -355,11 +440,19 @@ export default function Page() {
               🍽️ Let’s Eat
             </Button>
 
-            <Button onClick={panicPick} variant="danger" className="px-6 py-4 text-base">
+            <Button
+              onClick={panicPick}
+              variant="danger"
+              className="px-6 py-4 text-base"
+            >
               🚨 I’m Exhausted
             </Button>
 
-            <Button onClick={resetWeek} variant="outline" className="px-6 py-4 text-base">
+            <Button
+              onClick={resetWeek}
+              variant="outline"
+              className="px-6 py-4 text-base"
+            >
               🔄 Reset Weekly Lockout
             </Button>
           </div>
