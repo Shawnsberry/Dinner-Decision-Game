@@ -322,8 +322,8 @@ export default function Page() {
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
             {(Object.keys(filters) as Array<keyof typeof filters>).map((key) => (
               <div key={key} className="grid gap-2">
-                <label className="text-sm font-semibold capitalize text-zinc-900">
-                  {key}
+                <label className="text-sm font-bold tracking-wide text-zinc-900">
+                  {key.charAt(0).toUpperCase() + key.slice(1)}
                 </label>
                 <select
                   className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black focus:outline-none focus:ring-2 focus:ring-black"
