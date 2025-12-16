@@ -89,6 +89,20 @@ const meals: Meal[] = [
 const STORAGE_KEY = "dinner-game-state";
 const INTRO_KEY = "dinner-intro-seen";
 
+type FilterKey = "type" | "origin" | "diet" | "prep" | "time" | "protein";
+
+const FILTER_META: Record<
+  FilterKey,
+  { label: string; icon: string; hint?: string }
+> = {
+  type: { label: "Type", icon: "🍳" },
+  origin: { label: "Origin", icon: "🌎" },
+  diet: { label: "Diet", icon: "🥗" },
+  prep: { label: "Prep Time", icon: "⏱️" },
+  time: { label: "Energy", icon: "⚡", hint: "Busy vs Free" },
+  protein: { label: "Protein", icon: "💪" },
+};
+
 function Pill({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-sm text-zinc-900">
@@ -120,28 +134,23 @@ function Button({
   disabled,
   variant = "primary",
   className = "",
-  type = "button",
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
-  variant?: "primary" | "danger" | "outline" | "ghost";
+  variant?: "primary" | "danger" | "outline";
   className?: string;
-  type?: "button" | "submit";
 }) {
   const base =
-    "rounded-2xl px-4 py-2 text-sm font-semibold transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed";
+    "rounded-2xl px-4 py-2 text-sm font-semibold transition disabled:opacity-50";
   const styles =
     variant === "primary"
-      ? "bg-black text-white hover:bg-zinc-800"
+      ? "bg-black text-white"
       : variant === "danger"
-      ? "bg-red-600 text-white hover:bg-red-500"
-      : variant === "outline"
-      ? "border bg-white text-zinc-900 hover:bg-zinc-50"
-      : "hover:bg-zinc-50 text-zinc-900";
+      ? "bg-red-600 text-white"
+      : "border bg-white text-zinc-900";
   return (
     <button
-      type={type}
       className={`${base} ${styles} ${className}`}
       onClick={onClick}
       disabled={disabled}
@@ -151,82 +160,40 @@ function Button({
   );
 }
 
-function IntroScreen({ onStart }: { onStart: () => void }) {
-  return (
-    <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-6">
-      <div className="max-w-md w-full rounded-2xl border bg-white shadow-sm">
-        <div className="p-8 text-center grid gap-4">
-          <div className="text-4xl">🍽️</div>
-          <h1 className="text-3xl font-bold text-zinc-900">Dinner, Decided</h1>
-          <p className="text-zinc-700">
-            This little game exists so you don’t have to decide what to cook
-            every night.
-          </p>
-          <p className="text-sm text-zinc-600">
-            Pick an energy level, choose any filters you want, then tap the big
-            button.
-          </p>
-          <div className="pt-2">
-            <Button onClick={onStart} className="px-6 py-3 text-base">
-              Let’s Go
-            </Button>
-          </div>
-          <p className="text-xs text-zinc-500">(Shows once per device.)</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type FilterKey = "type" | "origin" | "diet" | "prep" | "time" | "protein";
-
-const FILTER_META: Record<
-  FilterKey,
-  { label: string; icon: string; hint?: string }
-> = {
-  type: { label: "Type", icon: "🍳" },
-  origin: { label: "Origin", icon: "🌎" },
-  diet: { label: "Diet", icon: "🥗" },
-  prep: { label: "Prep Time", icon: "⏱️" },
-  time: { label: "Energy", icon: "⚡", hint: "Busy vs Free" },
-  protein: { label: "Protein", icon: "💪" },
-};
-
 function FilterSelect({
   label,
   icon,
   value,
-  onChange,
   options,
+  onChange,
   hint,
 }: {
   label: string;
   icon: string;
   value: string;
-  onChange: (v: string) => void;
   options: string[];
+  onChange: (v: string) => void;
   hint?: string;
 }) {
   return (
     <div className="grid gap-2">
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex items-baseline gap-2">
         <label className="text-sm font-bold tracking-wide text-zinc-900">
           <span className="mr-2">{icon}</span>
           {label}
+          {hint ? " —" : ""}
         </label>
-        {hint ? (
-          <span className="text-xs text-zinc-500">{hint}</span>
-        ) : null}
+        {hint && (
+          <span className="text-xs text-zinc-500 ml-1">{hint}</span>
+        )}
       </div>
       <select
-        className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black focus:outline-none focus:ring-2 focus:ring-black"
+        className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
         {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
+          <option key={o}>{o}</option>
         ))}
       </select>
     </div>
@@ -236,7 +203,6 @@ function FilterSelect({
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
-
   const [filters, setFilters] = useState<Record<FilterKey, string>>({
     type: "All",
     origin: "All",
@@ -245,9 +211,7 @@ export default function Page() {
     time: "All",
     protein: "All",
   });
-
   const [picked, setPicked] = useState<Meal | null>(null);
-  const [vetoes, setVetoes] = useState({ you: 1, partner: 1 });
   const [history, setHistory] = useState<string[]>([]);
   const [points, setPoints] = useState(0);
 
@@ -257,272 +221,106 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    const day = new Date().getDay(); // 0 Sun ... 6 Sat
-    setFilters((f) => ({
-      ...f,
-      time: day === 0 || day === 6 ? "Free" : "Busy",
-    }));
+    const day = new Date().getDay();
+    setFilters((f) => ({ ...f, time: day === 0 || day === 6 ? "Free" : "Busy" }));
   }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return;
-    try {
+    if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed.history)) setHistory(parsed.history);
-      if (typeof parsed.points === "number") setPoints(parsed.points);
-    } catch {}
+      setHistory(parsed.history || []);
+      setPoints(parsed.points || 0);
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, points }));
   }, [history, points]);
 
-  const filteredMeals = useMemo(() => {
-    return meals.filter((m) => {
-      const match = (Object.entries(filters) as [FilterKey, string][]).every(
-        ([k, v]) => v === "All" || (m as any)[k] === v
-      );
-      return match && !history.includes(m.name);
-    });
-  }, [filters, history]);
+  const filteredMeals = useMemo(
+    () =>
+      meals.filter(
+        (m) =>
+          !history.includes(m.name) &&
+          (Object.entries(filters) as [FilterKey, string][]).every(
+            ([k, v]) => v === "All" || (m as any)[k] === v
+          )
+      ),
+    [filters, history]
+  );
 
-  const options = (key: FilterKey) => {
-    const vals = Array.from(new Set(meals.map((m) => (m as any)[key])));
-    return ["All", ...vals];
-  };
+  const options = (key: FilterKey) => [
+    "All",
+    ...Array.from(new Set(meals.map((m) => (m as any)[key]))),
+  ];
 
   const letsEat = () => {
-    if (filteredMeals.length === 0) return;
-    const choice =
-      filteredMeals[Math.floor(Math.random() * filteredMeals.length)];
-    setPicked(choice);
-  };
-
-  const panicPick = () => {
-    setFilters((f) => ({ ...f, time: "Busy" }));
-    setVetoes({ you: 0, partner: 0 });
-
-    const busyMeals = meals.filter(
-      (m) => m.time === "Busy" && !history.includes(m.name)
+    if (!filteredMeals.length) return;
+    setPicked(
+      filteredMeals[Math.floor(Math.random() * filteredMeals.length)]
     );
-    if (busyMeals.length === 0) return;
-
-    const choice = busyMeals[Math.floor(Math.random() * busyMeals.length)];
-    setPicked(choice);
   };
 
-  const veto = (who: "you" | "partner") => {
-    if (vetoes[who] <= 0) return;
-    setVetoes((v) => ({ ...v, [who]: v[who] - 1 }));
-    setPicked(null);
-  };
-
-  const acceptMeal = () => {
-    if (!picked) return;
-    setHistory((h) => [...h, picked.name]);
-    if (!["Italian", "American"].includes(picked.origin)) {
-      setPoints((p) => p + 10);
-    }
-    setPicked(null);
-    setVetoes({ you: 1, partner: 1 });
-  };
-
-  const resetWeek = () => setHistory([]);
-
-  if (!mounted) return <div className="min-h-screen bg-zinc-50" />;
+  if (!mounted) return null;
 
   if (showIntro) {
     return (
-      <IntroScreen
-        onStart={() => {
-          localStorage.setItem(INTRO_KEY, "true");
-          setShowIntro(false);
-        }}
-      />
+      <div className="min-h-screen flex items-center justify-center bg-zinc-50">
+        <Button
+          onClick={() => {
+            localStorage.setItem(INTRO_KEY, "true");
+            setShowIntro(false);
+          }}
+          className="px-8 py-4 text-lg"
+        >
+          Let’s Go
+        </Button>
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      {/* More breathing room on phones, slightly tighter on desktop */}
-      <div className="max-w-4xl mx-auto p-6 sm:p-7 grid gap-10 sm:gap-8">
+      <div className="max-w-4xl mx-auto p-6 grid gap-10">
         <header className="text-center grid gap-3">
-          <h1 className="text-3xl font-bold text-zinc-900">
-            🎮 Dinner Decision Game
-          </h1>
-          <p className="text-zinc-700">
-            Weekdays default to <b>Busy</b>. Weekends default to <b>Free</b>.
-            Panic button included.
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
+          <h1 className="text-3xl font-bold">🎮 Dinner Decision Game</h1>
+          <div className="flex justify-center gap-2">
             <Pill>🏆 Points: {points}</Pill>
             <Pill>🔒 Locked out: {history.length}</Pill>
-            <Pill>⚡ Mode: {filters.time}</Pill>
           </div>
         </header>
 
         <Panel title="Set the rules">
-          {/* Grouped filters with subtle dividers */}
           <div className="grid gap-8">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-5">
-              <FilterSelect
-                icon={FILTER_META.type.icon}
-                label={FILTER_META.type.label}
-                value={filters.type}
-                hint={FILTER_META.type.hint}
-                options={options("type")}
-                onChange={(v) => setFilters((f) => ({ ...f, type: v }))}
-              />
-              <FilterSelect
-                icon={FILTER_META.origin.icon}
-                label={FILTER_META.origin.label}
-                value={filters.origin}
-                hint={FILTER_META.origin.hint}
-                options={options("origin")}
-                onChange={(v) => setFilters((f) => ({ ...f, origin: v }))}
-              />
-            </div>
-
-            <div className="border-t pt-6" />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-5">
-              <FilterSelect
-                icon={FILTER_META.diet.icon}
-                label={FILTER_META.diet.label}
-                value={filters.diet}
-                hint={FILTER_META.diet.hint}
-                options={options("diet")}
-                onChange={(v) => setFilters((f) => ({ ...f, diet: v }))}
-              />
-              <FilterSelect
-                icon={FILTER_META.protein.icon}
-                label={FILTER_META.protein.label}
-                value={filters.protein}
-                hint={FILTER_META.protein.hint}
-                options={options("protein")}
-                onChange={(v) => setFilters((f) => ({ ...f, protein: v }))}
-              />
-            </div>
-
-            <div className="border-t pt-6" />
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-5">
-              <FilterSelect
-                icon={FILTER_META.prep.icon}
-                label={FILTER_META.prep.label}
-                value={filters.prep}
-                hint={FILTER_META.prep.hint}
-                options={options("prep")}
-                onChange={(v) => setFilters((f) => ({ ...f, prep: v }))}
-              />
-              <FilterSelect
-                icon={FILTER_META.time.icon}
-                label={FILTER_META.time.label}
-                value={filters.time}
-                hint={FILTER_META.time.hint}
-                options={options("time")}
-                onChange={(v) => setFilters((f) => ({ ...f, time: v }))}
-              />
-            </div>
+            {(["type", "origin", "diet", "protein", "prep", "time"] as FilterKey[]).map(
+              (key) => (
+                <FilterSelect
+                  key={key}
+                  {...FILTER_META[key]}
+                  value={filters[key]}
+                  options={options(key)}
+                  onChange={(v) =>
+                    setFilters((f) => ({ ...f, [key]: v }))
+                  }
+                />
+              )
+            )}
           </div>
 
-          <p className="text-center text-sm text-zinc-600 mt-10">
-            Done choosing? Let the game decide ↓
-          </p>
-
-          <div className="mt-4 flex flex-col sm:flex-row flex-wrap gap-4 justify-center border-t pt-6">
-            <Button
-              onClick={letsEat}
-              disabled={filteredMeals.length === 0}
-              className="px-8 py-4 text-lg"
-            >
+          <div className="mt-8 flex justify-center gap-4">
+            <Button onClick={letsEat} className="px-8 py-4 text-lg">
               🍽️ Let’s Eat
             </Button>
-
-            <Button
-              onClick={panicPick}
-              variant="danger"
-              className="px-6 py-4 text-base"
-            >
-              🚨 I’m Exhausted
-            </Button>
-
-            <Button
-              onClick={resetWeek}
-              variant="outline"
-              className="px-6 py-4 text-base"
-            >
-              🔄 Reset Weekly Lockout
-            </Button>
           </div>
-
-          <p className="mt-4 text-sm text-zinc-700 text-center">
-            Remaining options:{" "}
-            <span className="font-semibold">{filteredMeals.length}</span>
-          </p>
         </Panel>
 
-        {picked ? (
-          <div className="rounded-2xl border bg-white shadow-sm">
-            <div className="p-6 text-center grid gap-4">
-              <div className="text-3xl">🍽️</div>
-              <h2 className="text-2xl font-semibold text-zinc-900">
-                Tonight’s Winner
-              </h2>
-              <div className="text-xl font-bold text-zinc-900">{picked.name}</div>
-
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <Pill>{picked.type}</Pill>
-                <Pill>{picked.origin}</Pill>
-                <Pill>{picked.prep}</Pill>
-                <Pill>{picked.time}</Pill>
-                <Pill>{picked.protein} protein</Pill>
-              </div>
-
-              <div className="text-sm text-zinc-700">
-                <span className="font-semibold">🛒 Grocery mini-list:</span>{" "}
-                {picked.groceries.join(", ")}
-              </div>
-
-              <div className="mt-2 flex flex-col sm:flex-row flex-wrap justify-center gap-3">
-                <Button
-                  variant="outline"
-                  disabled={vetoes.you === 0}
-                  onClick={() => veto("you")}
-                  className="px-5 py-3 text-base"
-                >
-                  🙅 You Veto ({vetoes.you})
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={vetoes.partner === 0}
-                  onClick={() => veto("partner")}
-                  className="px-5 py-3 text-base"
-                >
-                  🙅 Partner Veto ({vetoes.partner})
-                </Button>
-                <Button onClick={acceptMeal} className="px-6 py-3 text-base">
-                  ✅ Accept
-                </Button>
-              </div>
-
-              {vetoes.you === 0 && vetoes.partner === 0 ? (
-                <p className="text-xs text-zinc-500">
-                  Panic mode: vetoes disabled. The game is the boss tonight.
-                </p>
-              ) : null}
+        {picked && (
+          <Panel title="Tonight’s Winner">
+            <div className="text-center grid gap-3">
+              <h3 className="text-xl font-bold">{picked.name}</h3>
+              <p className="text-sm">{picked.groceries.join(", ")}</p>
             </div>
-          </div>
-        ) : (
-          <Panel title="How to play">
-            <ul className="text-base text-zinc-700 grid gap-3 list-disc pl-5">
-              <li>Pick an energy level (Busy/Free) and any filters you want.</li>
-              <li>
-                Tap <b>🍽️ Let’s Eat</b> and let fate choose.
-              </li>
-              <li>Each person gets 1 veto… unless panic button was used 😄</li>
-            </ul>
           </Panel>
         )}
       </div>
