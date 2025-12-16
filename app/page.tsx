@@ -317,7 +317,7 @@ export default function Page() {
               <div key={key} className="grid gap-1">
                 <label className="text-sm font-semibold capitalize">{key}</label>
                 <select
-                  className="w-full rounded-xl border bg-white px-3 py-2"
+                  className="w-full rounded-xl border bg-white px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-black"
                   value={filters[key]}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, [key]: e.target.value }))
@@ -333,13 +333,13 @@ export default function Page() {
             ))}
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap gap-4 justify-center border-t pt-6">
             <Button onClick={randomPick} disabled={filteredMeals.length === 0}>
-              🎯 Random Pick
+              🎯 Click to Eat
             </Button>
             <Button onClick={panicPick} variant="danger">
               🚨 I’m Exhausted
-            </Button>
+            </Button>r
             <Button onClick={resetWeek} variant="outline">
               🔄 Reset Weekly Lockout
             </Button>
@@ -401,7 +401,7 @@ export default function Page() {
             <ul className="text-sm text-zinc-700 grid gap-2 list-disc pl-5">
               <li>Pick an energy level (Busy/Free) and any filters you want.</li>
               <li>
-                Hit <b>Random Pick</b> and let fate choose.
+                Hit <b>Click to eat</b> and let fate choose.
               </li>
               <li>Each person gets 1 veto… unless panic button was used 😄</li>
             </ul>
