@@ -2,6 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 
+/* ===================== TYPES ===================== */
+
 type Meal = {
   name: string;
   type: string;
@@ -12,6 +14,10 @@ type Meal = {
   protein: string;
   groceries: string[];
 };
+
+type FilterKey = "type" | "origin" | "diet" | "prep" | "time" | "protein";
+
+/* ===================== DATA ===================== */
 
 const meals: Meal[] = [
   {
@@ -86,10 +92,10 @@ const meals: Meal[] = [
   },
 ];
 
+/* ===================== CONSTANTS ===================== */
+
 const STORAGE_KEY = "dinner-game-state";
 const INTRO_KEY = "dinner-intro-seen";
-
-type FilterKey = "type" | "origin" | "diet" | "prep" | "time" | "protein";
 
 const FILTER_META: Record<
   FilterKey,
@@ -103,13 +109,7 @@ const FILTER_META: Record<
   protein: { label: "Protein", icon: "💪" },
 };
 
-function Pill({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center rounded-full border bg-white px-3 py-1 text-sm text-zinc-900">
-      {children}
-    </span>
-  );
-}
+/* ===================== UI HELPERS ===================== */
 
 function Panel({
   title,
@@ -120,10 +120,10 @@ function Panel({
 }) {
   return (
     <div className="rounded-2xl border bg-white shadow-sm">
-      <div className="border-b px-5 py-4">
+      <div className="border-b px-6 py-5">
         <h2 className="text-lg font-semibold text-zinc-900">{title}</h2>
       </div>
-      <div className="px-5 py-5">{children}</div>
+      <div className="px-6 py-6">{children}</div>
     </div>
   );
 }
@@ -131,29 +131,29 @@ function Panel({
 function Button({
   children,
   onClick,
-  disabled,
   variant = "primary",
   className = "",
+  disabled,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
-  disabled?: boolean;
   variant?: "primary" | "danger" | "outline";
   className?: string;
+  disabled?: boolean;
 }) {
   const base =
-    "rounded-2xl px-4 py-2 text-sm font-semibold transition disabled:opacity-50";
+    "rounded-2xl font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed";
   const styles =
     variant === "primary"
-      ? "bg-black text-white"
+      ? "bg-black text-white hover:bg-zinc-800"
       : variant === "danger"
-      ? "bg-red-600 text-white"
-      : "border bg-white text-zinc-900";
+      ? "bg-red-600 text-white hover:bg-red-500"
+      : "border bg-white text-zinc-900 hover:bg-zinc-50";
   return (
     <button
-      className={`${base} ${styles} ${className}`}
       onClick={onClick}
       disabled={disabled}
+      className={`${base} ${styles} ${className}`}
     >
       {children}
     </button>
@@ -163,32 +163,30 @@ function Button({
 function FilterSelect({
   label,
   icon,
+  hint,
   value,
   options,
   onChange,
-  hint,
 }: {
   label: string;
   icon: string;
+  hint?: string;
   value: string;
   options: string[];
   onChange: (v: string) => void;
-  hint?: string;
 }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-3">
       <div className="flex items-baseline gap-2">
         <label className="text-sm font-bold tracking-wide text-zinc-900">
           <span className="mr-2">{icon}</span>
           {label}
           {hint ? " —" : ""}
         </label>
-        {hint && (
-          <span className="text-xs text-zinc-500 ml-1">{hint}</span>
-        )}
+        {hint && <span className="text-xs text-zinc-500">{hint}</span>}
       </div>
       <select
-        className="w-full rounded-xl border bg-white px-4 py-3 text-base text-black"
+        className="w-full rounded-xl border bg-white px-5 py-4 text-base text-black"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -200,9 +198,12 @@ function FilterSelect({
   );
 }
 
+/* ===================== PAGE ===================== */
+
 export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+
   const [filters, setFilters] = useState<Record<FilterKey, string>>({
     type: "All",
     origin: "All",
@@ -211,9 +212,12 @@ export default function Page() {
     time: "All",
     protein: "All",
   });
+
   const [picked, setPicked] = useState<Meal | null>(null);
   const [history, setHistory] = useState<string[]>([]);
   const [points, setPoints] = useState(0);
+
+  /* ---------- Mount + persistence ---------- */
 
   useEffect(() => {
     setMounted(true);
@@ -222,7 +226,10 @@ export default function Page() {
 
   useEffect(() => {
     const day = new Date().getDay();
-    setFilters((f) => ({ ...f, time: day === 0 || day === 6 ? "Free" : "Busy" }));
+    setFilters((f) => ({
+      ...f,
+      time: day === 0 || day === 6 ? "Free" : "Busy",
+    }));
   }, []);
 
   useEffect(() => {
@@ -237,6 +244,8 @@ export default function Page() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ history, points }));
   }, [history, points]);
+
+  /* ---------- Logic ---------- */
 
   const filteredMeals = useMemo(
     () =>
@@ -262,17 +271,27 @@ export default function Page() {
     );
   };
 
+  const panicPick = () => {
+    const busyMeals = meals.filter(
+      (m) => m.time === "Busy" && !history.includes(m.name)
+    );
+    if (!busyMeals.length) return;
+    setPicked(busyMeals[Math.floor(Math.random() * busyMeals.length)]);
+  };
+
+  /* ---------- Render ---------- */
+
   if (!mounted) return null;
 
   if (showIntro) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50">
         <Button
+          className="px-12 py-6 text-xl"
           onClick={() => {
             localStorage.setItem(INTRO_KEY, "true");
             setShowIntro(false);
           }}
-          className="px-8 py-4 text-lg"
         >
           Let’s Go
         </Button>
@@ -282,35 +301,43 @@ export default function Page() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <div className="max-w-4xl mx-auto p-6 grid gap-10">
+      <div className="max-w-4xl mx-auto p-6 grid gap-12">
         <header className="text-center grid gap-3">
-          <h1 className="text-3xl font-bold">🎮 Dinner Decision Game</h1>
-          <div className="flex justify-center gap-2">
-            <Pill>🏆 Points: {points}</Pill>
-            <Pill>🔒 Locked out: {history.length}</Pill>
-          </div>
+          <h1 className="text-3xl font-bold text-zinc-900">
+            🎮 Dinner Decision Game
+          </h1>
+          <p className="text-zinc-700">
+            Weekdays default to Busy. Weekends default to Free.
+          </p>
         </header>
 
         <Panel title="Set the rules">
-          <div className="grid gap-8">
-            {(["type", "origin", "diet", "protein", "prep", "time"] as FilterKey[]).map(
-              (key) => (
-                <FilterSelect
-                  key={key}
-                  {...FILTER_META[key]}
-                  value={filters[key]}
-                  options={options(key)}
-                  onChange={(v) =>
-                    setFilters((f) => ({ ...f, [key]: v }))
-                  }
-                />
-              )
-            )}
+          <div className="grid gap-10 sm:grid-cols-2 sm:gap-x-8">
+            {(Object.keys(filters) as FilterKey[]).map((key) => (
+              <FilterSelect
+                key={key}
+                {...FILTER_META[key]}
+                value={filters[key]}
+                options={options(key)}
+                onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
+              />
+            ))}
           </div>
 
-          <div className="mt-8 flex justify-center gap-4">
-            <Button onClick={letsEat} className="px-8 py-4 text-lg">
+          {/* HUGE separation from filters */}
+          <div className="mt-24 border-t pt-16" />
+
+          {/* Action buttons – very spaced */}
+          <div className="mt-14 flex flex-col sm:flex-row justify-center items-center gap-16">
+            <Button className="px-14 py-7 text-xl min-w-[240px]" onClick={letsEat}>
               🍽️ Let’s Eat
+            </Button>
+            <Button
+              className="px-14 py-7 text-xl min-w-[240px]"
+              variant="danger"
+              onClick={panicPick}
+            >
+              🚨 I’m Exhausted
             </Button>
           </div>
         </Panel>
@@ -318,8 +345,12 @@ export default function Page() {
         {picked && (
           <Panel title="Tonight’s Winner">
             <div className="text-center grid gap-3">
-              <h3 className="text-xl font-bold">{picked.name}</h3>
-              <p className="text-sm">{picked.groceries.join(", ")}</p>
+              <h3 className="text-xl font-bold text-zinc-900">
+                {picked.name}
+              </h3>
+              <p className="text-sm text-zinc-700">
+                {picked.groceries.join(", ")}
+              </p>
             </div>
           </Panel>
         )}
