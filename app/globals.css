@@ -1,8 +1,11 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ================================
-   GLOBAL RESET – FORCE READABILITY
+   FORCE READABILITY + FIX SELECTS
    ================================ */
 
-/* Force light mode everywhere */
 :root {
   color-scheme: light;
 }
@@ -12,36 +15,10 @@ html, body {
   padding: 0;
   background-color: #f4f4f5; /* zinc-50 */
   color: #111827;           /* zinc-900 */
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, Helvetica, Arial, sans-serif;
 }
 
-/* Headings */
-h1, h2, h3, h4, h5, h6 {
-  color: #111827;
-}
-
-/* Paragraphs & labels */
-p, label, span, li {
-  color: #111827;
-}
-
-/* Links */
-a {
-  color: #2563eb;
-}
-
-/* Panels / cards */
-div {
-  color: inherit;
-}
-
-/* ================================
-   FORM CONTROLS (THE BIG FIX)
-   ================================ */
-
-select,
-option {
+/* Make native selects readable on Windows/Chrome */
+select {
   appearance: auto !important;
   -webkit-appearance: menulist !important;
   -moz-appearance: menulist !important;
@@ -49,29 +26,7 @@ option {
   color: #000000 !important;
 }
 
-/* Inputs & buttons */
-input,
-button {
-  color: #111827;
-  background-color: #ffffff;
-}
-
-/* ================================
-   TAILWIND SAFETY OVERRIDES
-   ================================ */
-
-/* Prevent invisible text due to theme vars */
-* {
-  --tw-text-opacity: 1 !important;
-}
-
-/* Ensure Tailwind prose never goes invisible */
-.prose,
-.prose * {
-  color: #111827 !important;
-}
-/* ---- CENTER MAIN APP CONTENT ---- */
-body > div {
-  display: flex;
-  justify-content: center;
+option {
+  background-color: #ffffff !important;
+  color: #000000 !important;
 }
