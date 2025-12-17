@@ -154,18 +154,14 @@ const FILTER_META: Record<FilterKey, { label: string; icon: string; hint?: strin
 /* ===================== HELPERS ===================== */
 
 function makeId(prefix: string) {
-  const uuid =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
-  return `${prefix}-${uuid}`;
+  return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
 }
 
 function normalizeName(s: string) {
   return s.trim().toLowerCase();
 }
 
-// Safer base64 for unicode JSON
+// Safer base64 for unicode JSON (works in browsers)
 function toB64(str: string) {
   return btoa(unescape(encodeURIComponent(str)));
 }
@@ -193,7 +189,7 @@ function mealFromDraft(base: Meal, d: MealDraft): Omit<Meal, "id"> {
 
   return {
     name: d.name.trim(),
-    type: base.type, // keep existing type (display only)
+    type: base.type,
     origin: d.cuisine.trim(),
     diet: d.diet,
     prep: d.prep,
@@ -641,13 +637,16 @@ export default function Page() {
     setPicked(busyMeals[Math.floor(Math.random() * busyMeals.length)]);
   };
 
+  // ✅ FIXED: TS-safe + de-dupe + sort
   const favoriteMeals: Meal[] = useMemo(() => {
     const byId = new Map(allMeals.map((m) => [m.id, m]));
     const uniqIds = Array.from(new Set(favorites));
+    const isMeal = (x: Meal | undefined): x is Meal => Boolean(x);
+
     return uniqIds
       .map((id) => byId.get(id))
-      .filter(Boolean)
-      .sort((a, b) => a.name.localeCompare(b.name)) as Meal[];
+      .filter(isMeal)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [favorites, allMeals]);
 
   const pickSpecificMeal = (meal: Meal) => {
@@ -958,7 +957,7 @@ export default function Page() {
     }
   };
 
-  // ✅ FIX: this useMemo MUST be above the early returns to keep hook order stable
+  // planner meal dropdown options (MUST be above early returns)
   const plannerMealOptions = useMemo(() => {
     return [...allMeals].sort((a, b) => a.name.localeCompare(b.name));
   }, [allMeals]);
@@ -1443,11 +1442,7 @@ export default function Page() {
                               ♻️ Reset
                             </Button>
                           ) : (
-                            <Button
-                              variant="outline"
-                              className="px-4 py-2 text-sm"
-                              onClick={() => deleteCustomMeal(m.id)}
-                            >
+                            <Button variant="outline" className="px-4 py-2 text-sm" onClick={() => deleteCustomMeal(m.id)}>
                               🗑️ Delete
                             </Button>
                           )}
