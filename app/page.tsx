@@ -30,6 +30,20 @@ type MealDraft = {
 
 type DefaultEdits = Record<string, Omit<Meal, "id">>;
 
+type Plan = {
+  rangeDays: 14 | 21;
+  startDateISO: string; // YYYY-MM-DD
+  assignments: Record<string, string>; // dateISO -> mealId
+};
+
+type BackupPayload = {
+  v: 2;
+  favorites: string[]; // meal IDs
+  customMeals: Meal[];
+  defaultEdits: DefaultEdits;
+  plan?: Plan;
+};
+
 /* ===================== DEFAULT MEALS ===================== */
 
 const DEFAULT_MEALS: Meal[] = [
@@ -140,11 +154,23 @@ const FILTER_META: Record<FilterKey, { label: string; icon: string; hint?: strin
 /* ===================== HELPERS ===================== */
 
 function makeId(prefix: string) {
-  return `${prefix}-${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
+  const uuid =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Math.random().toString(16).slice(2)}-${Date.now().toString(16)}`;
+  return `${prefix}-${uuid}`;
 }
 
 function normalizeName(s: string) {
   return s.trim().toLowerCase();
+}
+
+// Safer base64 for unicode JSON
+function toB64(str: string) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+function fromB64(b64: string) {
+  return decodeURIComponent(escape(atob(b64)));
 }
 
 function draftFromMeal(m: Meal): MealDraft {
@@ -167,7 +193,7 @@ function mealFromDraft(base: Meal, d: MealDraft): Omit<Meal, "id"> {
 
   return {
     name: d.name.trim(),
-    type: base.type, // keep existing type (still display only)
+    type: base.type, // keep existing type (display only)
     origin: d.cuisine.trim(),
     diet: d.diet,
     prep: d.prep,
@@ -192,6 +218,64 @@ function matchesSearch(meal: Meal, q: string) {
     .join(" ")
     .toLowerCase();
   return hay.includes(s);
+}
+
+function coerceMeal(input: any): Meal | null {
+  if (!input || typeof input !== "object") return null;
+  const id = typeof input.id === "string" ? input.id : makeId("custom");
+  const time: "Busy" | "Free" = input.time === "Free" ? "Free" : "Busy";
+  const groceries =
+    Array.isArray(input.groceries) && input.groceries.length
+      ? input.groceries.map((x: any) => String(x))
+      : ["(add groceries later)"];
+
+  const name = String(input.name ?? "").trim();
+  const origin = String(input.origin ?? input.cuisine ?? "").trim();
+
+  if (!name) return null;
+  if (!origin) return null;
+
+  return {
+    id,
+    name,
+    type: String(input.type ?? ""),
+    origin,
+    diet: String(input.diet ?? "None"),
+    prep: String(input.prep ?? "30 min"),
+    time,
+    protein: String(input.protein ?? "Medium"),
+    groceries,
+  };
+}
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function addDaysISO(iso: string, n: number) {
+  const [y, m, d] = iso.split("-").map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function formatDayLabel(iso: string) {
+  const [y, m, d] = iso.split("-").map((x) => parseInt(x, 10));
+  const dt = new Date(y, m - 1, d);
+  const dow = dt.toLocaleDateString(undefined, { weekday: "short" });
+  const mon = dt.toLocaleDateString(undefined, { month: "short" });
+  return `${dow}, ${mon} ${dt.getDate()}`;
+}
+
+function randPick<T>(arr: T[]) {
+  return arr[Math.floor(Math.random() * arr.length)];
 }
 
 /* ===================== UI HELPERS ===================== */
@@ -361,6 +445,21 @@ export default function Page() {
   const [mealSearch, setMealSearch] = useState("");
   const [quickPickId, setQuickPickId] = useState<string>("");
 
+  // Backup/restore UI
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string>("");
+  const [backupText, setBackupText] = useState<string>("");
+  const [backupMsg, setBackupMsg] = useState<string>("");
+
+  // Planner UI/state
+  const [plannerOpen, setPlannerOpen] = useState(false);
+  const [plan, setPlan] = useState<Plan>({
+    rangeDays: 14,
+    startDateISO: todayISO(),
+    assignments: {},
+  });
+  const [plannerMsg, setPlannerMsg] = useState("");
+
   useEffect(() => {
     setMounted(true);
     setShowIntro(!localStorage.getItem(INTRO_KEY));
@@ -380,36 +479,43 @@ export default function Page() {
       const parsed = JSON.parse(saved);
 
       const loadedCustom: any[] = Array.isArray(parsed.customMeals) ? parsed.customMeals : [];
-      const withIds: Meal[] = loadedCustom
-        .map((m) => {
-          if (!m || typeof m !== "object") return null;
-          const id = typeof m.id === "string" ? m.id : makeId("custom");
-          return {
-            id,
-            name: String(m.name ?? ""),
-            type: String(m.type ?? "Custom"),
-            origin: String(m.origin ?? m.cuisine ?? ""),
-            diet: String(m.diet ?? "None"),
-            prep: String(m.prep ?? "30 min"),
-            time: (m.time === "Free" ? "Free" : "Busy") as "Busy" | "Free",
-            protein: String(m.protein ?? "Medium"),
-            groceries: Array.isArray(m.groceries) ? m.groceries.map(String) : ["(add groceries later)"],
-          } satisfies Meal;
-        })
-        .filter(Boolean) as Meal[];
-
+      const withIds: Meal[] = loadedCustom.map(coerceMeal).filter(Boolean) as Meal[];
       setCustomMeals(withIds);
 
-      const loadedEdits = parsed.defaultEdits && typeof parsed.defaultEdits === "object" ? parsed.defaultEdits : {};
+      const loadedEdits =
+        parsed.defaultEdits && typeof parsed.defaultEdits === "object" ? parsed.defaultEdits : {};
       setDefaultEdits(loadedEdits as DefaultEdits);
+
+      // Plan
+      if (parsed.plan && typeof parsed.plan === "object") {
+        const p = parsed.plan as Plan;
+        if (
+          (p.rangeDays === 14 || p.rangeDays === 21) &&
+          typeof p.startDateISO === "string" &&
+          p.assignments &&
+          typeof p.assignments === "object"
+        ) {
+          setPlan({
+            rangeDays: p.rangeDays,
+            startDateISO: p.startDateISO,
+            assignments: p.assignments ?? {},
+          });
+        }
+      }
 
       const loadedFavs: any[] = Array.isArray(parsed.favorites) ? parsed.favorites : [];
       const looksLikeIds = loadedFavs.some((x) => typeof x === "string" && x.includes("-"));
+
       if (looksLikeIds) {
         setFavorites(loadedFavs.filter((x) => typeof x === "string"));
       } else {
+        const effectiveDefaultsForMigration: Meal[] = DEFAULT_MEALS.map((m) => {
+          const edit = (loadedEdits as DefaultEdits)[m.id];
+          return edit ? ({ ...m, ...edit, id: m.id } as Meal) : m;
+        });
+
         const byName = new Map<string, string>();
-        DEFAULT_MEALS.forEach((m) => byName.set(normalizeName(m.name), m.id));
+        effectiveDefaultsForMigration.forEach((m) => byName.set(normalizeName(m.name), m.id));
         withIds.forEach((m) => byName.set(normalizeName(m.name), m.id));
 
         const migrated = loadedFavs
@@ -426,8 +532,62 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ favorites, customMeals, defaultEdits }));
-  }, [favorites, customMeals, defaultEdits]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ favorites, customMeals, defaultEdits, plan }));
+  }, [favorites, customMeals, defaultEdits, plan]);
+
+  // Auto-import from URL (?import=...)
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      const imp = url.searchParams.get("import");
+      if (!imp) return;
+
+      const json = fromB64(imp);
+      const payload = JSON.parse(json);
+
+      const ok =
+        payload &&
+        (payload.v === 1 || payload.v === 2 || payload.v === undefined) &&
+        Array.isArray(payload.favorites) &&
+        Array.isArray(payload.customMeals) &&
+        payload.defaultEdits &&
+        typeof payload.defaultEdits === "object";
+
+      if (!ok) {
+        setBackupMsg("Import link was invalid.");
+      } else {
+        const importedCustom = (payload.customMeals as any[]).map(coerceMeal).filter(Boolean) as Meal[];
+        const importedFavs = (payload.favorites as any[]).filter((x) => typeof x === "string") as string[];
+        const importedEdits = payload.defaultEdits as DefaultEdits;
+
+        setCustomMeals(importedCustom);
+        setFavorites(Array.from(new Set(importedFavs)));
+        setDefaultEdits(importedEdits);
+
+        if (payload.plan && typeof payload.plan === "object") {
+          const p = payload.plan as Plan;
+          if (
+            (p.rangeDays === 14 || p.rangeDays === 21) &&
+            typeof p.startDateISO === "string" &&
+            p.assignments &&
+            typeof p.assignments === "object"
+          ) {
+            setPlan({ rangeDays: p.rangeDays, startDateISO: p.startDateISO, assignments: p.assignments });
+          }
+        }
+
+        setBackupMsg("✅ Imported from QR link!");
+        setBackupOpen(true);
+        setQrUrl("");
+        setBackupText("");
+      }
+
+      url.searchParams.delete("import");
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // ignore bad import
+    }
+  }, []);
 
   const isFavorite = (mealId: string) => favorites.includes(mealId);
 
@@ -437,7 +597,12 @@ export default function Page() {
 
   const options = (key: FilterKey) => {
     if (key === "favorites") return ["All", "Favorites Only"];
-    return ["All", ...Array.from(new Set(allMeals.map((m) => (m as any)[key])))];
+
+    const uniq = Array.from(
+      new Set(allMeals.map((m) => String((m as any)[key] ?? "")).filter(Boolean))
+    ).sort((a, b) => a.localeCompare(b));
+
+    return ["All", ...uniq];
   };
 
   const filteredMeals = useMemo(() => {
@@ -478,7 +643,11 @@ export default function Page() {
 
   const favoriteMeals: Meal[] = useMemo(() => {
     const byId = new Map(allMeals.map((m) => [m.id, m]));
-    return favorites.map((id) => byId.get(id)).filter(Boolean) as Meal[];
+    const uniqIds = Array.from(new Set(favorites));
+    return uniqIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .sort((a, b) => a.name.localeCompare(b.name)) as Meal[];
   }, [favorites, allMeals]);
 
   const pickSpecificMeal = (meal: Meal) => {
@@ -490,18 +659,15 @@ export default function Page() {
     setCustomMeals((ms) => ms.filter((m) => m.id !== id));
     setFavorites((f) => f.filter((x) => x !== id));
     if (picked?.id === id) setPicked(null);
-    if (editingId === id) {
-      setEditingId(null);
-      setDraft({
-        name: "",
-        cuisine: "",
-        diet: "None",
-        prep: "30 min",
-        energy: "Busy",
-        protein: "Medium",
-        groceries: "",
+    if (editingId === id) cancelEdit();
+
+    setPlan((p) => {
+      const next = { ...p.assignments };
+      Object.keys(next).forEach((dateISO) => {
+        if (next[dateISO] === id) delete next[dateISO];
       });
-    }
+      return { ...p, assignments: next };
+    });
   };
 
   const startEdit = (meal: Meal) => {
@@ -549,7 +715,7 @@ export default function Page() {
       const meal: Meal = {
         id,
         name,
-        type: "Custom",
+        type: "",
         origin: cuisine,
         diet: draft.diet,
         prep: draft.prep,
@@ -593,22 +759,209 @@ export default function Page() {
   };
 
   const manageMeals = useMemo(() => {
-    // Keep defaults first, then customs; both searchable
     const list = [...effectiveDefaults, ...customMeals];
     return list.filter((m) => matchesSearch(m, mealSearch));
   }, [effectiveDefaults, customMeals, mealSearch]);
 
   const quickPickOptions = useMemo(() => {
-    // dropdown options (filtered by the same search so it’s usable)
     return manageMeals.map((m) => ({ id: m.id, label: m.name }));
   }, [manageMeals]);
 
   useEffect(() => {
-    // If current quickPickId disappears due to search filter, clear it
     if (quickPickId && !quickPickOptions.some((o) => o.id === quickPickId)) {
       setQuickPickId("");
     }
   }, [quickPickId, quickPickOptions]);
+
+  const isEditing = Boolean(editingId);
+
+  const planDays = useMemo(() => {
+    return Array.from({ length: plan.rangeDays }, (_, i) => addDaysISO(plan.startDateISO, i));
+  }, [plan.rangeDays, plan.startDateISO]);
+
+  useEffect(() => {
+    const ids = new Set(allMeals.map((m) => m.id));
+    setPlan((p) => {
+      const next = { ...p.assignments };
+      let changed = false;
+      Object.entries(next).forEach(([dateISO, mealId]) => {
+        if (!ids.has(mealId)) {
+          delete next[dateISO];
+          changed = true;
+        }
+      });
+      return changed ? { ...p, assignments: next } : p;
+    });
+  }, [allMeals]);
+
+  const assignMealToDate = (dateISO: string, mealId: string | null) => {
+    setPlannerMsg("");
+    setPlan((p) => {
+      const next = { ...p.assignments };
+      if (!mealId) delete next[dateISO];
+      else next[dateISO] = mealId;
+      return { ...p, assignments: next };
+    });
+  };
+
+  const autoFillPlan = () => {
+    setPlannerMsg("");
+
+    const source =
+      favorites.length > 0
+        ? allMeals.filter((m) => favorites.includes(m.id))
+        : filteredMeals.length
+        ? filteredMeals
+        : allMeals;
+
+    if (!source.length) {
+      setPlannerMsg("No meals available to auto-fill.");
+      return;
+    }
+
+    setPlan((p) => {
+      const next = { ...p.assignments };
+      const alreadyUsed = new Set(Object.values(next));
+
+      for (const dateISO of planDays) {
+        if (next[dateISO]) continue;
+
+        const unused = source.filter((m) => !alreadyUsed.has(m.id));
+        const pool = unused.length ? unused : source;
+
+        const pick = randPick(pool);
+        next[dateISO] = pick.id;
+        alreadyUsed.add(pick.id);
+      }
+
+      return { ...p, assignments: next };
+    });
+
+    setPlannerMsg("✅ Auto-filled!");
+  };
+
+  const clearPlan = () => {
+    setPlannerMsg("");
+    setPlan((p) => ({ ...p, assignments: {} }));
+    setPlannerMsg("Cleared.");
+  };
+
+  const shiftPlanStartToToday = () => {
+    setPlannerMsg("");
+    setPlan((p) => ({ ...p, startDateISO: todayISO() }));
+    setPlannerMsg("Start moved to today.");
+  };
+
+  const plannedGroceries = useMemo(() => {
+    const byId = new Map(allMeals.map((m) => [m.id, m]));
+    const counts = new Map<string, number>();
+
+    planDays.forEach((dateISO) => {
+      const mealId = plan.assignments[dateISO];
+      if (!mealId) return;
+      const meal = byId.get(mealId);
+      if (!meal) return;
+      meal.groceries.forEach((g) => {
+        const key = g.trim();
+        if (!key) return;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      });
+    });
+
+    return Array.from(counts.entries())
+      .map(([item, count]) => ({ item, count }))
+      .sort((a, b) => a.item.localeCompare(b.item));
+  }, [planDays, plan.assignments, allMeals]);
+
+  const buildBackupPayload = (): BackupPayload => ({
+    v: 2,
+    favorites,
+    customMeals,
+    defaultEdits,
+    plan,
+  });
+
+  const buildImportUrl = () => {
+    const json = JSON.stringify(buildBackupPayload());
+    const b64 = toB64(json);
+
+    if (b64.length > 2500) {
+      setBackupMsg("⚠️ Backup is pretty large. QR might not scan reliably. Use Copy Backup instead.");
+    } else {
+      setBackupMsg("");
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("import", b64);
+    return url.toString();
+  };
+
+  const showQrBackup = () => {
+    const importUrl = buildImportUrl();
+    setQrUrl(importUrl);
+    setBackupOpen(true);
+  };
+
+  const copyBackupText = async () => {
+    try {
+      const json = JSON.stringify(buildBackupPayload());
+      await navigator.clipboard.writeText(json);
+      setBackupMsg("✅ Backup copied. Paste it on your phone in Restore.");
+      setBackupOpen(true);
+    } catch {
+      setBackupMsg("Could not copy to clipboard (browser blocked it).");
+      setBackupOpen(true);
+    }
+  };
+
+  const restoreFromText = () => {
+    setBackupMsg("");
+    try {
+      const payload = JSON.parse(backupText);
+      const ok =
+        payload &&
+        (payload.v === 1 || payload.v === 2 || payload.v === undefined) &&
+        Array.isArray(payload.favorites) &&
+        Array.isArray(payload.customMeals) &&
+        payload.defaultEdits &&
+        typeof payload.defaultEdits === "object";
+
+      if (!ok) {
+        setBackupMsg("That backup text didn’t look valid.");
+        return;
+      }
+
+      const importedCustom = (payload.customMeals as any[]).map(coerceMeal).filter(Boolean) as Meal[];
+      const importedFavs = (payload.favorites as any[]).filter((x) => typeof x === "string") as string[];
+      const importedEdits = payload.defaultEdits as DefaultEdits;
+
+      setCustomMeals(importedCustom);
+      setFavorites(Array.from(new Set(importedFavs)));
+      setDefaultEdits(importedEdits);
+
+      if (payload.plan && typeof payload.plan === "object") {
+        const p = payload.plan as Plan;
+        if (
+          (p.rangeDays === 14 || p.rangeDays === 21) &&
+          typeof p.startDateISO === "string" &&
+          p.assignments &&
+          typeof p.assignments === "object"
+        ) {
+          setPlan({ rangeDays: p.rangeDays, startDateISO: p.startDateISO, assignments: p.assignments });
+        }
+      }
+
+      setBackupMsg("✅ Restored successfully!");
+      setBackupText("");
+    } catch {
+      setBackupMsg("That backup text couldn’t be parsed. (Did you paste the whole thing?)");
+    }
+  };
+
+  // ✅ FIX: this useMemo MUST be above the early returns to keep hook order stable
+  const plannerMealOptions = useMemo(() => {
+    return [...allMeals].sort((a, b) => a.name.localeCompare(b.name));
+  }, [allMeals]);
 
   if (!mounted) return null;
 
@@ -619,9 +972,7 @@ export default function Page() {
           <div className="p-8 text-center grid gap-4">
             <div className="text-4xl">🍽️</div>
             <h1 className="text-3xl font-bold text-zinc-900">Dinner, Decided</h1>
-            <p className="text-zinc-700">
-              Pick your vibe, tap the big button, and let the app be the bad guy.
-            </p>
+            <p className="text-zinc-700">Pick your vibe, tap the big button, and let the app be the bad guy.</p>
             <Button
               className="px-12 py-6 text-xl"
               onClick={() => {
@@ -636,8 +987,6 @@ export default function Page() {
       </div>
     );
   }
-
-  const isEditing = Boolean(editingId);
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -665,7 +1014,7 @@ export default function Page() {
                   key={key}
                   {...FILTER_META[key]}
                   value={filters[key]}
-                  options={options(key)}
+                  options={key === "favorites" ? ["All", "Favorites Only"] : options(key)}
                   onChange={(v) => setFilters((f) => ({ ...f, [key]: v }))}
                 />
               ))}
@@ -687,6 +1036,189 @@ export default function Page() {
           <p className="mt-8 text-center text-sm text-zinc-700">
             Matching options: <b>{filteredMeals.length}</b>
           </p>
+        </Panel>
+
+        {/* Meal Planner */}
+        <Panel title="🗓️ Meal Planner (2–3 weeks)">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-zinc-700">
+              Plan dinners ahead for <b>14</b> or <b>21</b> days. Assign meals to dates and generate a shopping list.
+            </p>
+
+            <Button variant="outline" className="px-5 py-3 text-base" onClick={() => setPlannerOpen((o) => !o)}>
+              {plannerOpen ? "Hide" : "Show"}
+            </Button>
+          </div>
+
+          {plannerOpen ? (
+            <div className="mt-5 grid gap-4">
+              {plannerMsg ? (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-800">
+                  {plannerMsg}
+                </div>
+              ) : null}
+
+              <div className="flex gap-2 flex-wrap items-center">
+                <div className="text-sm font-extrabold tracking-[0.04em] text-zinc-900">Range:</div>
+                <Button
+                  variant={plan.rangeDays === 14 ? "primary" : "outline"}
+                  className="px-5 py-3 text-base"
+                  onClick={() => setPlan((p) => ({ ...p, rangeDays: 14 }))}
+                >
+                  14 days
+                </Button>
+                <Button
+                  variant={plan.rangeDays === 21 ? "primary" : "outline"}
+                  className="px-5 py-3 text-base"
+                  onClick={() => setPlan((p) => ({ ...p, rangeDays: 21 }))}
+                >
+                  21 days
+                </Button>
+
+                <div className="mx-2 h-6 w-px bg-zinc-200" />
+
+                <Button variant="outline" className="px-5 py-3 text-base" onClick={shiftPlanStartToToday}>
+                  📍 Start today
+                </Button>
+
+                <Button className="px-5 py-3 text-base" onClick={autoFillPlan}>
+                  ✨ Auto-fill
+                </Button>
+
+                <Button variant="outline" className="px-5 py-3 text-base" onClick={clearPlan}>
+                  🧹 Clear
+                </Button>
+              </div>
+
+              <div className="text-xs text-zinc-500">
+                Auto-fill uses <b>favorites</b> first (if you have any), otherwise it uses your current filtered pool.
+              </div>
+
+              <div className="grid gap-2">
+                {planDays.map((dateISO) => {
+                  const assignedId = plan.assignments[dateISO] ?? "";
+                  const assignedMeal = assignedId ? allMeals.find((m) => m.id === assignedId) : null;
+
+                  return (
+                    <div key={dateISO} className="rounded-2xl border border-zinc-200 bg-white p-4 grid gap-3">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="font-extrabold text-zinc-900">
+                          {formatDayLabel(dateISO)}{" "}
+                          <span className="text-xs font-semibold text-zinc-500">({dateISO})</span>
+                        </div>
+
+                        <div className="flex gap-2 flex-wrap">
+                          <Button
+                            variant="outline"
+                            className="px-4 py-2 text-sm"
+                            onClick={() => {
+                              if (!filteredMeals.length) {
+                                setPlannerMsg("No meals match your current filters.");
+                                return;
+                              }
+                              const m = randPick(filteredMeals);
+                              assignMealToDate(dateISO, m.id);
+                              setPlannerMsg("");
+                            }}
+                          >
+                            🎲 Pick
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className="px-4 py-2 text-sm"
+                            disabled={!picked}
+                            onClick={() => {
+                              if (!picked) return;
+                              assignMealToDate(dateISO, picked.id);
+                              setPlannerMsg("");
+                            }}
+                          >
+                            ✅ Assign Winner
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            className="px-4 py-2 text-sm"
+                            disabled={!assignedId}
+                            onClick={() => assignMealToDate(dateISO, null)}
+                          >
+                            ✖ Clear
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2">
+                        <div className="text-sm font-extrabold tracking-[0.04em] text-zinc-900">Planned meal</div>
+
+                        <select
+                          value={assignedId}
+                          onChange={(e) => assignMealToDate(dateISO, e.target.value || null)}
+                          className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400"
+                        >
+                          <option value="">(Unplanned)</option>
+                          {plannerMealOptions.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        {assignedMeal ? (
+                          <div className="text-xs text-zinc-500">
+                            {assignedMeal.origin} • {assignedMeal.prep} • {assignedMeal.time} • {assignedMeal.protein}{" "}
+                            protein
+                          </div>
+                        ) : (
+                          <div className="text-xs text-zinc-500">Pick or choose a meal for this day.</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="border-t border-zinc-200 pt-4 grid gap-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="font-extrabold text-zinc-900">🛒 Shopping List (from planned meals)</div>
+
+                  <Button
+                    variant="outline"
+                    className="px-5 py-3 text-base"
+                    onClick={async () => {
+                      try {
+                        const text = plannedGroceries
+                          .map((x) => (x.count > 1 ? `${x.item} (x${x.count})` : x.item))
+                          .join("\n");
+                        await navigator.clipboard.writeText(text || "");
+                        setPlannerMsg(text ? "✅ Shopping list copied!" : "Nothing planned yet.");
+                      } catch {
+                        setPlannerMsg("Could not copy shopping list (browser blocked it).");
+                      }
+                    }}
+                  >
+                    📋 Copy list
+                  </Button>
+                </div>
+
+                {plannedGroceries.length === 0 ? (
+                  <div className="text-zinc-700">Nothing planned yet — assign a few days and it’ll appear here.</div>
+                ) : (
+                  <div className="grid gap-2">
+                    {plannedGroceries.map((x) => (
+                      <div
+                        key={x.item}
+                        className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm"
+                      >
+                        <div className="font-semibold text-zinc-900">{x.item}</div>
+                        <div className="text-zinc-500">{x.count > 1 ? `x${x.count}` : ""}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </Panel>
 
         {/* Winner */}
@@ -866,17 +1398,13 @@ export default function Page() {
                       </Button>
                     </div>
                   </div>
-
-                  <p className="text-xs text-zinc-500">
-                    Tip: the dropdown is best for quick “pick/edit” when you already know the meal name. For lots of meals,
-                    search is faster.
-                  </p>
                 </div>
 
                 <div className="mt-5 grid gap-2">
                   {manageMeals.map((m) => {
                     const isDef = isDefaultId(m.id);
                     const isEdited = Boolean(defaultEdits[m.id]);
+
                     return (
                       <div
                         key={m.id}
@@ -887,11 +1415,10 @@ export default function Page() {
                             {isDef ? "📌 " : "🧾 "}
                             {m.name}
                             {isDef ? (
-  <span className="ml-2 text-xs font-semibold text-zinc-500">
-    {isEdited ? "Default (edited)" : "Default"}
-  </span>
-) : null}
-
+                              <span className="ml-2 text-xs font-semibold text-zinc-500">
+                                {isEdited ? "Default (edited)" : "Default"}
+                              </span>
+                            ) : null}
                           </div>
                           <div className="text-xs text-zinc-500">
                             {m.origin} • {m.prep} • {m.time} • {m.protein} protein
@@ -938,7 +1465,100 @@ export default function Page() {
           </div>
         </Panel>
 
-        {/* Favorites (collapsed by default) */}
+        {/* Backup & Restore */}
+        <Panel title="🔁 Backup & Restore">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-zinc-700">Move favorites + meals + edits + planner between devices using QR.</p>
+
+            <Button variant="outline" className="px-5 py-3 text-base" onClick={() => setBackupOpen((o) => !o)}>
+              {backupOpen ? "Hide" : "Show"}
+            </Button>
+          </div>
+
+          {backupOpen ? (
+            <div className="mt-5 grid gap-4">
+              {backupMsg ? (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-800">
+                  {backupMsg}
+                </div>
+              ) : null}
+
+              <div className="flex gap-2 flex-wrap">
+                <Button className="px-6 py-3 text-base" onClick={showQrBackup}>
+                  📱 Show QR Backup
+                </Button>
+
+                <Button variant="outline" className="px-6 py-3 text-base" onClick={copyBackupText}>
+                  📋 Copy Backup (fallback)
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="px-6 py-3 text-base"
+                  onClick={() => {
+                    setQrUrl("");
+                    setBackupText("");
+                    setBackupMsg("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+
+              {qrUrl ? (
+                <div className="grid gap-2 justify-items-center">
+                  <div className="text-sm font-extrabold tracking-[0.04em] text-zinc-900">Scan this on your phone</div>
+
+                  <img
+                    alt="Backup QR code"
+                    className="rounded-2xl border border-zinc-200 bg-white p-3"
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrUrl)}`}
+                  />
+
+                  <div className="text-xs text-zinc-500 text-center max-w-[520px]">
+                    Tip: scanning opens a link that imports automatically.
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    className="px-6 py-3 text-base"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(qrUrl);
+                        setBackupMsg("✅ Import link copied.");
+                      } catch {
+                        setBackupMsg("Could not copy link (browser blocked it).");
+                      }
+                    }}
+                  >
+                    🔗 Copy Import Link
+                  </Button>
+                </div>
+              ) : null}
+
+              <div className="border-t border-zinc-200 pt-4">
+                <div className="text-sm font-extrabold tracking-[0.04em] text-zinc-900 mb-2">
+                  Restore from backup text (fallback)
+                </div>
+
+                <textarea
+                  value={backupText}
+                  onChange={(e) => setBackupText(e.target.value)}
+                  className="w-full min-h-[140px] rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400"
+                  placeholder="Paste backup JSON here (from Copy Backup) and click Restore…"
+                />
+
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <Button className="px-6 py-3 text-base" onClick={restoreFromText} disabled={!backupText.trim()}>
+                    ✅ Restore
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </Panel>
+
+        {/* Favorites */}
         <Panel title="⭐ Favorites">
           <div className="flex items-center justify-between gap-3">
             <p className="text-zinc-700">
