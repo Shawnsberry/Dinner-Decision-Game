@@ -1023,11 +1023,11 @@ export default function Page() {
           <div className="mt-16 border-t border-zinc-200 pt-14" />
 
           <div className="flex flex-col items-center justify-center gap-10 mt-10">
-            <Button onClick={letsEat} className="px-14 py-7 text-xl">
+            <Button onClick={letsEat} className="px-16 py-8 text-2xl min-w-[260px]">
               🍽️ Let’s Eat
             </Button>
 
-            <Button onClick={panicPick} variant="danger" className="px-14 py-7 text-xl">
+            <Button onClick={panicPick} variant="danger" className="px-16 py-8 text-2xl min-w-[260px]">
               🚨 I’m Exhausted
             </Button>
           </div>
@@ -1327,7 +1327,7 @@ export default function Page() {
                 </Button>
 
                 {isEditing ? (
-                  <Button variant="outline" className="px-10 py-4 text-lg" onClick={cancelEdit}>
+                  <Button variant="outline" className="px-12 py-6 text-xl min-w-[220px]" onClick={cancelEdit}>
                     Cancel
                   </Button>
                 ) : null}
