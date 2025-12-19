@@ -594,9 +594,9 @@ export default function Page() {
   const options = (key: FilterKey) => {
     if (key === "favorites") return ["All", "Favorites Only"];
 
-    const uniq = Array.from(
-      new Set(allMeals.map((m) => String((m as any)[key] ?? "")).filter(Boolean))
-    ).sort((a, b) => a.localeCompare(b));
+    const uniq = Array.from(new Set(allMeals.map((m) => String((m as any)[key] ?? "")).filter(Boolean))).sort(
+      (a, b) => a.localeCompare(b)
+    );
 
     return ["All", ...uniq];
   };
@@ -637,7 +637,7 @@ export default function Page() {
     setPicked(busyMeals[Math.floor(Math.random() * busyMeals.length)]);
   };
 
-  // ✅ FIXED: TS-safe + de-dupe + sort
+  // ✅ TS-safe + de-dupe + sort
   const favoriteMeals: Meal[] = useMemo(() => {
     const byId = new Map(allMeals.map((m) => [m.id, m]));
     const uniqIds = Array.from(new Set(favorites));
@@ -1022,12 +1022,17 @@ export default function Page() {
 
           <div className="mt-16 border-t border-zinc-200 pt-14" />
 
-          <div className="flex flex-col items-center justify-center gap-10 mt-10">
+          {/* ✅ BIG BUTTONS */}
+          <div className="flex flex-col items-stretch gap-10 mt-10">
             <Button onClick={letsEat} className="w-full py-12 text-[42px] font-extrabold leading-none">
               🍽️ Let’s Eat
             </Button>
 
-            <Button onClick={panicPick} variant="danger" className="w-full py-12 text-[42px] font-extrabold leading-none">
+            <Button
+              onClick={panicPick}
+              variant="danger"
+              className="w-full py-12 text-[42px] font-extrabold leading-none"
+            >
               🚨 I’m Exhausted
             </Button>
           </div>
@@ -1321,13 +1326,21 @@ export default function Page() {
                 </div>
               ) : null}
 
-              <div className="flex gap-3 justify-center flex-wrap">
-                <Button className="px-10 py-4 text-lg" onClick={saveDraft}>
+              {/* ✅ BIG ADD/SAVE BUTTON */}
+              <div className="grid gap-3">
+                <Button
+                  className="w-full py-10 text-[32px] font-extrabold leading-none"
+                  onClick={saveDraft}
+                >
                   {isEditing ? "💾 Save Changes" : "➕ Add Meal"}
                 </Button>
 
                 {isEditing ? (
-                  <Button variant="outline" className="px-12 py-6 text-xl min-w-[220px]" onClick={cancelEdit}>
+                  <Button
+                    variant="outline"
+                    className="w-full py-8 text-[24px] font-extrabold leading-none"
+                    onClick={cancelEdit}
+                  >
                     Cancel
                   </Button>
                 ) : null}
@@ -1442,7 +1455,11 @@ export default function Page() {
                               ♻️ Reset
                             </Button>
                           ) : (
-                            <Button variant="outline" className="px-4 py-2 text-sm" onClick={() => deleteCustomMeal(m.id)}>
+                            <Button
+                              variant="outline"
+                              className="px-4 py-2 text-sm"
+                              onClick={() => deleteCustomMeal(m.id)}
+                            >
                               🗑️ Delete
                             </Button>
                           )}
