@@ -425,6 +425,9 @@ export default function Page() {
   // Favorites panel (collapsed by default)
   const [favoritesOpen, setFavoritesOpen] = useState(false);
 
+  // ✅ NEW: Manage Meals show/hide (collapsed by default)
+  const [manageOpen, setManageOpen] = useState(false);
+
   // Meal editor state
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<MealDraft>({
@@ -637,7 +640,6 @@ export default function Page() {
     setPicked(busyMeals[Math.floor(Math.random() * busyMeals.length)]);
   };
 
-  // ✅ TS-safe + de-dupe + sort
   const favoriteMeals: Meal[] = useMemo(() => {
     const byId = new Map(allMeals.map((m) => [m.id, m]));
     const uniqIds = Array.from(new Set(favorites));
@@ -1022,7 +1024,6 @@ export default function Page() {
 
           <div className="mt-16 border-t border-zinc-200 pt-14" />
 
-          {/* ✅ BIG BUTTONS */}
           <div className="flex flex-col items-stretch gap-10 mt-10">
             <Button onClick={letsEat} className="w-full py-12 text-[42px] font-extrabold leading-none">
               🍽️ Let’s Eat
@@ -1326,12 +1327,8 @@ export default function Page() {
                 </div>
               ) : null}
 
-              {/* ✅ BIG ADD/SAVE BUTTON */}
               <div className="grid gap-3">
-                <Button
-                  className="w-full py-10 text-[32px] font-extrabold leading-none"
-                  onClick={saveDraft}
-                >
+                <Button className="w-full py-10 text-[32px] font-extrabold leading-none" onClick={saveDraft}>
                   {isEditing ? "💾 Save Changes" : "➕ Add Meal"}
                 </Button>
 
@@ -1346,132 +1343,152 @@ export default function Page() {
                 ) : null}
               </div>
 
-              {/* Manage Meals controls */}
-              <div className="border-t border-zinc-200 pt-5 mt-2">
-                <div className="font-extrabold text-zinc-900 mb-3">Manage Meals</div>
+              {/* ✅ BIG "Manage Meals" header + Show/Hide like Favorites */}
+              <div className="border-t border-zinc-200 pt-6 mt-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-2xl font-extrabold text-zinc-900">🧰 Manage Meals</div>
 
-                <div className="grid gap-4">
-                  <TextInput
-                    label="Search meals"
-                    value={mealSearch}
-                    onChange={(v) => setMealSearch(v)}
-                    placeholder="Search by name, cuisine, groceries…"
-                  />
-
-                  <div className="grid gap-2">
-                    <div className="text-sm font-extrabold tracking-[0.04em] text-zinc-900">
-                      Quick pick (optional)
-                    </div>
-                    <select
-                      value={quickPickId}
-                      onChange={(e) => setQuickPickId(e.target.value)}
-                      className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400"
-                    >
-                      <option value="">Select a meal…</option>
-                      {quickPickOptions.map((o) => (
-                        <option key={o.id} value={o.id}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        variant="outline"
-                        className="px-5 py-3 text-base"
-                        disabled={!quickPickId}
-                        onClick={() => {
-                          const m = allMeals.find((x) => x.id === quickPickId);
-                          if (m) pickSpecificMeal(m);
-                        }}
-                      >
-                        🎯 Pick
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        className="px-5 py-3 text-base"
-                        disabled={!quickPickId}
-                        onClick={() => {
-                          const m = allMeals.find((x) => x.id === quickPickId);
-                          if (m) startEdit(m);
-                        }}
-                      >
-                        ✏️ Edit
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        className="px-5 py-3 text-base"
-                        disabled={!quickPickId || !isDefaultId(quickPickId) || !defaultEdits[quickPickId]}
-                        onClick={() => resetDefaultMeal(quickPickId)}
-                      >
-                        ♻️ Reset default
-                      </Button>
-                    </div>
-                  </div>
+                  <Button
+                    variant="outline"
+                    className="px-5 py-3 text-base"
+                    onClick={() => setManageOpen((o) => !o)}
+                  >
+                    {manageOpen ? "Hide" : "Show"}
+                  </Button>
                 </div>
 
-                <div className="mt-5 grid gap-2">
-                  {manageMeals.map((m) => {
-                    const isDef = isDefaultId(m.id);
-                    const isEdited = Boolean(defaultEdits[m.id]);
+                {manageOpen ? (
+                  <div className="mt-5 grid gap-4">
+                    <TextInput
+                      label="Search meals"
+                      value={mealSearch}
+                      onChange={(v) => setMealSearch(v)}
+                      placeholder="Search by name, cuisine, groceries…"
+                    />
 
-                    return (
-                      <div
-                        key={m.id}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-3"
-                      >
-                        <div className="grid gap-1 min-w-0">
-                          <div className="font-extrabold text-zinc-900 truncate">
-                            {isDef ? "📌 " : "🧾 "}
-                            {m.name}
-                            {isDef ? (
-                              <span className="ml-2 text-xs font-semibold text-zinc-500">
-                                {isEdited ? "Default (edited)" : "Default"}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="text-xs text-zinc-500">
-                            {m.origin} • {m.prep} • {m.time} • {m.protein} protein
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 flex-wrap">
-                          <Button variant="outline" className="px-4 py-2 text-sm" onClick={() => pickSpecificMeal(m)}>
-                            🎯 Pick
-                          </Button>
-                          <Button variant="outline" className="px-4 py-2 text-sm" onClick={() => startEdit(m)}>
-                            ✏️ Edit
-                          </Button>
-
-                          {isDef ? (
-                            <Button
-                              variant="outline"
-                              className="px-4 py-2 text-sm"
-                              disabled={!isEdited}
-                              onClick={() => resetDefaultMeal(m.id)}
-                            >
-                              ♻️ Reset
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              className="px-4 py-2 text-sm"
-                              onClick={() => deleteCustomMeal(m.id)}
-                            >
-                              🗑️ Delete
-                            </Button>
-                          )}
-                        </div>
+                    <div className="grid gap-2">
+                      <div className="text-sm font-extrabold tracking-[0.04em] text-zinc-900">
+                        Quick pick (optional)
                       </div>
-                    );
-                  })}
-                </div>
+                      <select
+                        value={quickPickId}
+                        onChange={(e) => setQuickPickId(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-base text-zinc-900 shadow-sm outline-none transition focus:border-zinc-400"
+                      >
+                        <option value="">Select a meal…</option>
+                        {quickPickOptions.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
 
-                <p className="text-xs text-zinc-500 mt-3">
-                  Defaults can’t be deleted — but you can edit them, and use <b>Reset</b> to go back to the original.
-                </p>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button
+                          variant="outline"
+                          className="px-5 py-3 text-base"
+                          disabled={!quickPickId}
+                          onClick={() => {
+                            const m = allMeals.find((x) => x.id === quickPickId);
+                            if (m) pickSpecificMeal(m);
+                          }}
+                        >
+                          🎯 Pick
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          className="px-5 py-3 text-base"
+                          disabled={!quickPickId}
+                          onClick={() => {
+                            const m = allMeals.find((x) => x.id === quickPickId);
+                            if (m) startEdit(m);
+                          }}
+                        >
+                          ✏️ Edit
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          className="px-5 py-3 text-base"
+                          disabled={!quickPickId || !isDefaultId(quickPickId) || !defaultEdits[quickPickId]}
+                          onClick={() => resetDefaultMeal(quickPickId)}
+                        >
+                          ♻️ Reset default
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 grid gap-2">
+                      {manageMeals.map((m) => {
+                        const isDef = isDefaultId(m.id);
+                        const isEdited = Boolean(defaultEdits[m.id]);
+
+                        return (
+                          <div
+                            key={m.id}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-3"
+                          >
+                            <div className="grid gap-1 min-w-0">
+                              <div className="font-extrabold text-zinc-900 truncate">
+                                {isDef ? "📌 " : "🧾 "}
+                                {m.name}
+                                {isDef ? (
+                                  <span className="ml-2 text-xs font-semibold text-zinc-500">
+                                    {isEdited ? "Default (edited)" : "Default"}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <div className="text-xs text-zinc-500">
+                                {m.origin} • {m.prep} • {m.time} • {m.protein} protein
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2 flex-wrap">
+                              <Button
+                                variant="outline"
+                                className="px-4 py-2 text-sm"
+                                onClick={() => pickSpecificMeal(m)}
+                              >
+                                🎯 Pick
+                              </Button>
+                              <Button variant="outline" className="px-4 py-2 text-sm" onClick={() => startEdit(m)}>
+                                ✏️ Edit
+                              </Button>
+
+                              {isDef ? (
+                                <Button
+                                  variant="outline"
+                                  className="px-4 py-2 text-sm"
+                                  disabled={!isEdited}
+                                  onClick={() => resetDefaultMeal(m.id)}
+                                >
+                                  ♻️ Reset
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  className="px-4 py-2 text-sm"
+                                  onClick={() => deleteCustomMeal(m.id)}
+                                >
+                                  🗑️ Delete
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-xs text-zinc-500 mt-1">
+                      Defaults can’t be deleted — but you can edit them, and use <b>Reset</b> to go back to the original.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-zinc-700">
+                    Tap <b>Show</b> to search, edit, reset defaults, or delete custom meals.
+                  </p>
+                )}
               </div>
             </div>
           </div>
