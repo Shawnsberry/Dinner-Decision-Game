@@ -1023,11 +1023,11 @@ export default function Page() {
           <div className="mt-16 border-t border-zinc-200 pt-14" />
 
           <div className="flex flex-col items-center justify-center gap-10 mt-10">
-            <Button onClick={letsEat} className="w-full px-8 py-10 text-4xl leading-none">
+            <Button onClick={letsEat} className="w-full py-12 text-[42px] font-extrabold leading-none">
               🍽️ Let’s Eat
             </Button>
 
-            <Button onClick={panicPick} variant="danger" className="w-full px-8 py-10 text-4xl leading-none">
+            <Button onClick={panicPick} variant="danger" className="w-full py-12 text-[42px] font-extrabold leading-none">
               🚨 I’m Exhausted
             </Button>
           </div>
